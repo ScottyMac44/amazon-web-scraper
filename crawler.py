@@ -46,35 +46,59 @@ def scrape_amazon(search_term):
     driver.get(url)
     time.sleep(5)
     records = []
-    
 
-    # Scroll to the bottom of the page to load more items
-    # Add a short delay to let the page load
-    time.sleep(5)
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    itr = 0
+    while True:
+        print(f'scraping page {itr}')
 
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
-    results = soup.find_all('div', {'data-component-type': 's-search-result'})
+        # Scroll to the bottom of the page to load more items
+        # Add a short delay to let the page load
+        time.sleep(5)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
-    print(results) # as long as I can parse this fucking mess and pull out URLs this will work.
-    pass
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        results = soup.find_all('div', {'data-component-type': 's-search-result'})
+        results_parser = BeautifulSoup(str(results), 'lxml')
+        item_links = []
+        
+        for a_tag in results_parser.find_all('a', class_='a-link-normal s-underline-text s-underline-link-text s-link-style a-text-normal'):
+            href = a_tag.get('href')
+            if href and "/dp/" in href:
+                item_links.append(href)
 
-    for item in results:
+        for item in item_links:
+            try:
+                data = scrape(f'https://www.amazon.com{item}')
+                df = pd.DataFrame(data, columns=['Listing Title', 'Listing Rating', 'Listing Price', 'Brand',
+                                        'Model Name', 'Screen Size', 'Color', 'Hard Disk Size',
+                                        'CPU Model', 'Ram Memory Installed Size', 'Operating System',
+                                        'Special Feature', 'Graphics Card Description', 'URL'
+                                        ])
+                df.to_excel(f'output{itr}.xlsx', index=False)
+
+            except Exception as e:
+                print(f"Error scraping item: {e}")
+
         try:
-            data = scrape(item)
-            records.append(data)
-        except Exception as e:
-            print(f"Error scraping item: {e}")
+            nextButton = driver.find_element(By.XPATH, '//a[text()="Next"]')
+            driver.execute_script("arguments[0].scrollIntoView();", nextButton)
+            WebDriverWait(driver, 10).until(ExpectedConditions.element_to_be_clickable(nextButton))
+            nextButton.click()
+        except NoSuchElementException:
+            print("Breaking as Last page Reached")
+            break
 
     driver.close()
 
     # Process the records
-    df = pd.DataFrame(records, columns=['Listing Title,', 'Rating', 'Price (USD)', 'Brand',
-                                        'Model Name', 'Screen Size', 'Color', 'Hard Disk Size',
-                                        'CPU Model', 'RAM Memory Installed Size', 'Operating System',
-                                        'Special Feature', 'Graphics Card Description', 'URL'
-                                        ])
-    return df
+    
+    # df = pd.DataFrame(records, columns=['Listing Title', 'Listing Rating', 'Listing Price', 'Brand',
+    #                                     'Model Name', 'Screen Size', 'Color', 'Hard Disk Size',
+    #                                     'CPU Model', 'Ram Memory Installed Size', 'Operating System',
+    #                                     'Special Feature', 'Graphics Card Description', 'URL'
+    #                                     ])
+    # print(df.__repr__)
+    # return df
 
 # def scrape_amazon(search_term):
 #     ua = UserAgent()
@@ -123,5 +147,4 @@ def scrape_amazon(search_term):
 #     return df
 
 if __name__ == '__main__':
-    df = scrape_amazon(SEARCH_TERM)
-    #df.to_excel('output.xlsx', index=False)
+    scrape_amazon(SEARCH_TERM)
